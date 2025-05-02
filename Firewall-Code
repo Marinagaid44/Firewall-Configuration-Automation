@@ -1,1 +1,62 @@
+#!/usr/bin/env bash
 
+# SSH user & optional key
+SSH_USER="root"                      # or a sudo-enabled user
+SSH_KEY="${HOME}/.ssh/id_rsa"        # path to private key
+
+# List of target servers (IP or hostname)
+SERVERS=(
+  "192.0.2.10"                      # example IP
+  "192.0.2.11"
+  "server03.example.com"
+)
+
+# Rules established (iptables-restore format)
+read -r -d '' IPTABLES_RULES <<'EOF'
+*filter
+:INPUT DROP [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+
+# Allow loopback
+-A INPUT -i lo -j ACCEPT
+
+# Allow established/related
+-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+# SSH, HTTP, HTTPS
+-A INPUT -p tcp --dport 22   -j ACCEPT
+-A INPUT -p tcp --dport 80   -j ACCEPT
+-A INPUT -p tcp --dport 443  -j ACCEPT
+
+COMMIT
+EOF
+
+# Function to apply rules to a host
+apply_rules() {
+  local host="$1"
+  echo "→ Applying rules to $host …"
+
+  ssh -i "$SSH_KEY" -o BatchMode=yes "$SSH_USER@$host" bash <<EOF
+# Backup existing rules
+iptables-save > /root/iptables-\$(date +%F_%T).bak
+
+# Apply new rules
+echo "$IPTABLES_RULES" | iptables-restore
+
+# Verify: list INPUT chain
+iptables -L INPUT
+EOF
+
+  # Check if the SSH command succeeded
+  if [[ $? -eq 0 ]]; then
+    echo "✔ Success on $host"
+  else
+    echo "✖ Failed on $host" >&2
+  fi
+}
+
+# Apply rules to each server
+for server in "${SERVERS[@]}"; do
+  apply_rules "$server"
+done
