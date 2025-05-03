@@ -6,12 +6,12 @@ SSH_KEY="${HOME}/.ssh/id_rsa"        # path to private key
 
 # List of target servers (IP or hostname)
 SERVERS=(
-  "192.0.2.10"                      # example IP
+  "192.0.2.10" # example IP
   "192.0.2.11"
   "server03.example.com"
 )
 
-# Rules established (iptables-restore format)
+# A block of iptables-restore-format rules
 read -r -d '' IPTABLES_RULES <<'EOF'
 *filter
 :INPUT DROP [0:0]
@@ -32,31 +32,46 @@ read -r -d '' IPTABLES_RULES <<'EOF'
 COMMIT
 EOF
 
-# Function to apply rules to a host
+# Colors for styling
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+RESET='\033[0m'
+
 apply_rules() {
   local host="$1"
-  echo "→ Applying rules to $host …"
+  echo -e "${CYAN}→ Applying rules to $host…${RESET}"
+  
+  ssh -i "$SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=no "$SSH_USER@$host" bash <<EOF
+    # backup existing rules
+    sudo iptables-save > /root/iptables-\$(date +%F_%T).bak
 
-  ssh -i "$SSH_KEY" -o BatchMode=yes "$SSH_USER@$host" bash <<EOF
-# Backup existing rules
-iptables-save > /root/iptables-\$(date +%F_%T).bak
+    # apply new rules
+    echo "\
+$IPTABLES_RULES
+" | sudo iptables-restore
 
-# Apply new rules
-echo "$IPTABLES_RULES" | iptables-restore
-
-# Verify: list INPUT chain
-iptables -L INPUT
+    # verify: list INPUT chain
+    sudo iptables -L INPUT
 EOF
 
-  # Check if the SSH command succeeded
+  # Check the exit status of the SSH command
   if [[ $? -eq 0 ]]; then
-    echo "✔ Success on $host"
+    echo -e "${GREEN}✔ Success on $host${RESET}"
   else
-    echo "✖ Failed on $host" >&2
+    echo -e "${RED}✖ Failed on $host${RESET}" >&2
   fi
 }
 
-# Apply rules to each server
+# Debugging: Print the list of servers
+echo -e "${YELLOW}Servers to process: ${SERVERS[@]}${RESET}"
+
+# Loop through the servers and apply rules
 for server in "${SERVERS[@]}"; do
   apply_rules "$server"
 done
+
+# Final message after all servers are processed
+echo -e "${GREEN}✔ The firewall configuration has been successfully applied to all servers.${RESET}"
