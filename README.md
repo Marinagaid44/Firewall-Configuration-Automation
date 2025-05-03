@@ -1,166 +1,148 @@
-# UFW Firewall Manager
+# IPtables Firewall Manager Script
 
-## Overview
+## Project Overview
 
-This project provides a script to manage UFW (Uncomplicated Firewall) rules across multiple servers. It allows users to:
-- Apply UFW rules to servers
-- Remove/reset UFW rules on servers
-- Check the status of UFW rules
-
-The script is designed to automate UFW configuration using a simple and efficient approach, making it ideal for managing firewall settings across multiple servers.
+This project provides a Bash script to manage and apply `iptables` firewall rules across multiple remote servers. It offers a simple and efficient way to configure consistent firewall settings using SSH. The script is ideal for system administrators who need to automate firewall management tasks across multiple Linux systems.
 
 ---
 
-## Features
+## Features**
 
-1. **Automated UFW Management**:
-   - Install UFW if not already installed.
-   - Reset UFW rules.
-   - Set default UFW policies (deny incoming, allow outgoing).
-   - Apply custom rules from a configuration file.
-   - Enable UFW with applied rules.
+1. Automated Firewall Management:
+   - Backs up existing `iptables` rules on the target servers to `/root/` with a timestamp.
+   - Applies predefined firewall rules using `iptables-restore`.
+   - Verifies and displays the `INPUT` chain after applying the rules.
 
-2. **Customizable Configuration**:
-   - Specify servers in an inventory file.
-   - Define UFW rules in a separate ports configuration file.
-   - Override default inventory, ports file, or SSH user.
+2. Predefined Rules**:
+   - Drops all incoming and forwarded traffic by default.
+   - Allows all outgoing traffic.
+   - Permits incoming traffic on specific ports:
+     - `22` (SSH)
+     - `80` (HTTP)
+     - `443` (HTTPS)
+   - Includes rules for loopback (`lo`) traffic and established/related connections.
 
-3. **Remote Management**:
-   - Use SSH to apply, remove, or check UFW rules on remote servers.
+3. Remote Management:
+   - Uses SSH to connect to and manage multiple servers.
+   - Supports key-based authentication for secure and automated access.
 
-4. **Safe Execution**:
-   - Uses `set -euo pipefail` for robust error handling.
-   - Validates input files and arguments before execution.
+4. Safe Execution:
+   - Ensures existing firewall rules are backed up before applying changes.
+   - Displays success or failure messages for each server.
 
 ---
 
 ## Prerequisites
 
-- **Supported OS**: Ubuntu or other Linux distributions that support UFW.
-- **Dependencies**:
-  - `ufw` package installed on target servers.
-  - SSH access to target servers.
-  - `bash` shell on the machine running the script.
-- **Files**:
-  - `servers.txt`: A list of target servers (one per line).
-  - `ports.conf`: A list of UFW rules to apply (one rule per line, e.g., `22/tcp` or `80`).
+1. **Supported Environment**:
+   - Target servers must have `iptables` installed.
+   - The local machine should have `bash` installed to run the script.
+
+2. SSH Configuration:
+   - SSH key-based authentication must be configured between the local machine and the target servers.
+   - Ensure the SSH user (`root` by default) has the necessary permissions to manage `iptables`.
+
+3. Dependencies:
+   - `iptables`, `iptables-save`, and `iptables-restore` must be installed on all target servers.
 
 ---
 
-## Usage
+## Setup Instructions
 
-### Step 1: Clone the Repository
-```bash
-git clone https://github.com/yourusername/ufw-firewall-manager.git
-cd ufw-firewall-manager
-```
+### Step 1: Prepare the Script
+1. Save the script as `firewall-manager.sh`:
+   ```bash
+   nano firewall-manager.sh
+   ```
+   Copy and paste the script into the file and save it.
 
-### Step 2: Create Configuration Files
-1. **Inventory File (`servers.txt`)**:
-   - Add the IP addresses or hostnames of servers (one per line):
-     ```
-     192.168.1.1
-     192.168.1.2
+2. Make the script executable:
+   ```bash
+   chmod +x firewall-manager.sh
+   ```
+
+---
+
+### Step 2: Configure the Script
+1. Set the SSH User and Private Key:
+   - Update the `SSH_USER` variable with the SSH user (default: `root`).
+   - Update the `SSH_KEY` variable with the path to the private SSH key.
+
+2. Define the Target Servers:
+   - Add the IP addresses or hostnames of the target servers to the `SERVERS` array:
+     ```bash
+     SERVERS=(
+       "192.0.2.10"
+       "192.0.2.11"
+       "server03.example.com"
+     )
      ```
 
-2. **Ports File (`ports.conf`)**:
-   - Add UFW rules to apply (one per line):
-     ```
-     22/tcp
-     80
-     443
-     ```
+3. Review the Firewall Rules:
+   - Modify the `IPTABLES_RULES` block to change the firewall rules as needed.
+   - The default rules allow SSH, HTTP, and HTTPS traffic while blocking all other incoming traffic.
+
+---
 
 ### Step 3: Run the Script
-
-1. **Apply Rules**:
+1. Execute the script to apply rules to all servers in the `SERVERS` array:
    ```bash
-   ./firewall-manager.sh -a apply
+   ./firewall-manager.sh
    ```
 
-2. **Check Status**:
-   ```bash
-   ./firewall-manager.sh -a status
-   ```
+2. Check the output for success or failure messages for each server.
 
-3. **Remove/Reset Rules**:
-   ```bash
-   ./firewall-manager.sh -a remove
-   ```
+---
 
-4. **Override Inventory or SSH User**:
-   ```bash
-   ./firewall-manager.sh -a apply -i my-servers.txt -u deploy
+## How It Works
+
+1. The script loops through each server in the `SERVERS` array.
+2. For each server:
+   - The script connects via SSH using the specified `SSH_USER` and `SSH_KEY`.
+   - It backs up existing `iptables` rules on the server to `/root/iptables-<timestamp>.bak`.
+   - It applies the new firewall rules using `iptables-restore`.
+   - Displays the `INPUT` chain to verify the applied rules.
+3. After processing all servers, it prints a final success message:
+   ```
+   ✔ The firewall configuration has been successfully applied to all servers.
    ```
 
 ---
 
-## Script Options
+## Troubleshooting
 
-```bash
-Usage: firewall-manager.sh -a ACTION [-i INVENTORY] [-p PORTS] [-u SSH_USER]
+1. SSH Connection Issues:
+   - Ensure the SSH private key path is correct and accessible.
+   - Verify that the target servers are reachable and have SSH enabled.
+   - Add the target server to the `known_hosts` file manually if prompted:
+     ```bash
+     ssh-keyscan -H <server> >> ~/.ssh/known_hosts
+     ```
 
-  -a ACTION      apply | remove | status
-  -i INVENTORY   list of servers (default: servers.txt)
-  -p PORTS       list of UFW rules (default: ports.conf)
-  -u SSH_USER    user for SSH (default: root)
-  -h             display this help
-```
+2. Permission Issues:
+   - Ensure the `SSH_USER` has sufficient privileges to manage `iptables` (e.g., root or a sudo-enabled user).
 
----
+3. Firewall Rule Errors:
+   - Test the rules on a single server manually before applying them across multiple servers:
+     ```bash
+     echo "$IPTABLES_RULES" | sudo iptables-restore
+     sudo iptables -L INPUT
+     ```
 
-## Code Documentation
-
-### Key Functions
-
-1. **`run_remote()`**:
-   - Executes a command over SSH on a remote server using the specified SSH user.
-
-2. **`apply_rules()`**:
-   - Installs UFW if needed.
-   - Resets and configures UFW defaults.
-   - Applies rules from the ports file.
-   - Enables UFW.
-
-3. **`remove_rules()`**:
-   - Resets UFW and disables it on target servers.
-
-4. **`status()`**:
-   - Displays the current UFW rules on target servers.
-
-5. **Argument Parsing**:
-   - Uses `getopts` to handle script arguments (`-a`, `-i`, `-p`, `-u`).
-
-### Error Handling
-- `set -euo pipefail`: Ensures the script exits on errors, treats unset variables as errors, and catches pipeline failures.
-- Validates the existence of inventory and ports files before execution.
+   4.Debugging:
+   - Add `-x` to the script execution for detailed logs:
+     ```bash
+     bash -x ./firewall-manager.sh
+     ```
 
 ---
 
-## Example Configuration
-
-### Inventory File (`servers.txt`)
-```
-192.168.1.1
-192.168.1.2
-```
-
-### Ports File (`ports.conf`)
-```
-22/tcp
-80
-443
-```
-
----
-
-## Notes
-
-- This script is designed for Ubuntu systems but may work on other Linux distributions with UFW support.
-- Ensure SSH access is configured for the specified user on all target servers.
+## Additional Notes
+- This script is designed to manage `iptables` on Linux systems and may not work on systems without `iptables`.
+- Always test the script on a staging server before applying it to production servers.
+- Misconfigured firewall rules can lock you out of the server. Ensure you have console or recovery access before executing the script.
 
 ---
 
 ## License
-
-This project is licensed under the MIT License. See the LICENSE file for details.
+This script is open-source and can be modified or extended as needed. 
